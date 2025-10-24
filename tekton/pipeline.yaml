@@ -15,6 +15,7 @@ spec:
     - name: repo-url
     - name: branch
       default: main
+    - name: build-image # <-- Add this line
   tasks:
     - name: init
       workspaces:
@@ -73,3 +74,18 @@ spec:
       runAfter:
         - clone # Run after cloning is done (in parallel with lint)
     # --- END OF TESTS TASK ---
+    # --- ADD THIS BUILD TASK ---
+    - name: build
+      workspaces:
+        - name: source # Workspace with the code
+          workspace: pipeline-workspace
+      taskRef:
+        name: buildah # Reference the pre-installed ClusterTask
+        kind: ClusterTask # Specify that it's a ClusterTask
+      params:
+      - name: IMAGE # Parameter expected by the buildah task
+        value: "$(params.build-image)" # Use the value from pipeline params
+      runAfter:
+        - tests # Run after tests finish
+        - lint  # Run after lint finishes
+    # --- END OF BUILD TASK ---
