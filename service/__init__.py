@@ -6,13 +6,15 @@ and SQL database
 """
 import sys
 from flask import Flask
-from flask_talisman import Talisman  # Import Talisman
+from flask_talisman import Talisman
+from flask_cors import CORS      # <--- ADD THIS IMPORT
 from service import config
 from service.common import log_handlers
 
 # Create Flask application
 app = Flask(__name__)
-talisman = Talisman(app)           # Initialize Talisman
+talisman = Talisman(app)
+CORS(app)                      # <--- ADD THIS LINE
 app.config.from_object(config)
 
 # Import the routes After the Flask app is created
