@@ -58,7 +58,7 @@ def accounts():
         return make_response(
             jsonify(message), status.HTTP_201_CREATED, {"Location": location_url}
         )
-
+    
     else:
         ##################
         # LIST ACCOUNTS
@@ -142,4 +142,4 @@ def check_content_type(media_type):
     abort(
         status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
         f"Content-Type must be {media_type}",
-    )
+)
