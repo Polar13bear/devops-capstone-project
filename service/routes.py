@@ -58,7 +58,7 @@ def accounts():
         return make_response(
             jsonify(message), status.HTTP_201_CREATED, {"Location": location_url}
         )
-    
+    # The blank line above this MUST NOT contain any spaces or tabs
     else:
         ##################
         # LIST ACCOUNTS
@@ -139,7 +139,10 @@ def check_content_type(media_type):
     if content_type and content_type == media_type:
         return
     app.logger.error("Invalid Content-Type: %s", content_type)
+    # Corrected indentation for the abort call
     abort(
         status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
         f"Content-Type must be {media_type}",
-)
+    )
+
+# A single blank line MUST exist below this line

@@ -15,6 +15,43 @@ spec:
       command: [/bin/echo]
       args: ["$(params.message)"]
 ---
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: nose
+spec:
+  description: This task will run nosetests on the provided input.
+  workspaces:
+    - name: source # Workspace containing the code
+  params:
+    - name: args # Arguments for nosetests
+      description: Arguments to pass to nose
+      type: string
+      default: "-v --with-spec --spec-color" # Default args from setup.cfg
+    - name: database_uri # Database connection string
+      description: Database connection string
+      type: string
+      default: "sqlite:///test.db" # Default to SQLite if none provided
+  steps:
+    - name: nosetests # Name of the step
+      image: python:3.9-slim # Python image to use
+      workingDir: $(workspaces.source.path) # Run inside the workspace
+      env:
+        - name: DATABASE_URI # Set the DATABASE_URI environment variable
+          value: $(params.database_uri) # Use the value passed to the task
+      script: | # The script to execute
+        #!/bin/bash
+        set -e # Exit immediately if a command exits with a non-zero status
+
+        echo "***** Installing dependencies *****"
+        python -m pip install --upgrade pip wheel
+        pip install -qr requirements.txt # Install requirements quietly
+
+        echo "***** Running nosetests with: $(params.args)"
+        # Run nosetests using the passed arguments
+        nosetests $(params.args)
+---       
 apiVersion: tekton.dev/v1beta1
 kind: Task
 metadata:

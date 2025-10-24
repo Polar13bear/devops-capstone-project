@@ -1,12 +1,12 @@
 #
 # This pipeline needs the following tasks from Tekton Hub
 #   - git-clone
-#   - flake8
+#   - flake8 (installed within the lint taskSpec)
 #
 ---
 apiVersion: tekton.dev/v1beta1
 kind: Pipeline
-metadata:  
+metadata:
   name: cd-pipeline
 spec:
   workspaces:
@@ -15,18 +15,19 @@ spec:
     - name: repo-url
     - name: branch
       default: main
+    - name: build-image # <-- Add this line
   tasks:
     - name: init
       workspaces:
         - name: source
-          workspace: pipeline-workspace          
+          workspace: pipeline-workspace
       taskRef:
         name: cleanup
 
     - name: clone
       workspaces:
         - name: output
-          workspace: pipeline-workspace          
+          workspace: pipeline-workspace
       taskRef:
         name: git-clone
       params:
@@ -36,3 +37,81 @@ spec:
         value: $(params.branch)
       runAfter:
         - init
+
+    # --- LINT TASK using taskSpec ---
+    - name: lint
+      workspaces:
+        - name: source # Workspace holding the cloned code
+          workspace: pipeline-workspace
+      taskSpec:  # Define steps directly
+        workspaces:
+          - name: source # Task needs to declare the workspace it uses
+        steps:
+          - name: install-and-run-flake8 # Combine install and run
+            image: python:3.9-slim # Use the same Python image
+            workingDir: $(workspaces.source.path) # Run commands inside the workspace
+            script: |
+              echo "Installing flake8..."
+              pip install flake8
+              echo "Running flake8..."
+              # Run flake8 on the 'service' directory
+              flake8 service --count --max-complexity=10 --max-line-length=127 --statistics
+      runAfter:
+        - clone # Still run after clone
+    # --- END OF LINT TASK ---
+    # --- ADD THIS TESTS TASK ---
+    - name: tests
+      workspaces:
+        - name: source # Workspace with the code
+          workspace: pipeline-workspace
+      taskRef:
+        name: nose # Reference the custom nose task
+      params:
+      - name: database_uri # Pass the database URI to the task
+        value: "sqlite:///test.db" # Use SQLite for now
+      - name: args # Pass arguments to nosetests
+        value: "-v --with-spec --spec-color"
+      runAfter:
+        - clone # Run after cloning is done (in parallel with lint)
+    # --- END OF TESTS TASK ---
+    # --- ADD THIS BUILD TASK ---
+    - name: build
+      workspaces:
+        - name: source # Workspace with the code
+          workspace: pipeline-workspace
+      taskRef:
+        name: buildah # Reference the pre-installed ClusterTask
+        kind: ClusterTask # Specify that it's a ClusterTask
+      params:
+      - name: IMAGE # Parameter expected by the buildah task
+        value: "$(params.build-image)" # Use the value from pipeline params
+      runAfter:
+        - tests # Run after tests finish
+        - lint  # Run after lint finishes
+    # --- END OF BUILD TASK ---
+    # --- ADD THIS DEPLOY TASK ---
+    - name: deploy
+      workspaces:
+        - name: manifest-dir # Workspace name expected by openshift-client
+          workspace: pipeline-workspace
+      taskRef:
+        name: openshift-client # Reference the pre-installed ClusterTask
+        kind: ClusterTask # Specify it's a ClusterTask
+      params:
+      - name: SCRIPT # Parameter expected by openshift-client
+        value: |
+          echo "Updating manifest with image: $(params.build-image)"
+          # Use sed to replace the placeholder in deployment.yaml
+          sed -i "s|IMAGE_NAME_HERE|$(params.build-image)|g" deploy/deployment.yaml
+          echo "--- Updated deployment.yaml ---"
+          cat deploy/deployment.yaml # Print the updated file for verification
+          echo "------------------------------"
+          echo "Deploying to OpenShift..."
+          # Apply everything in the deploy directory (deployment.yaml, service.yaml)
+          oc apply -f deploy/
+          echo "Getting deployment status..."
+          # Check the pods for the accounts app
+          oc get pods -l app=accounts
+      runAfter:
+        - build # Run after the build task is complete
+    # --- END OF DEPLOY TASK ---
