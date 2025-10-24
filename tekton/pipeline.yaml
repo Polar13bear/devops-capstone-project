@@ -1,12 +1,12 @@
 #
 # This pipeline needs the following tasks from Tekton Hub
 #   - git-clone
-#   - flake8
+#   - flake8 (installed within the lint taskSpec)
 #
 ---
 apiVersion: tekton.dev/v1beta1
 kind: Pipeline
-metadata:  
+metadata:
   name: cd-pipeline
 spec:
   workspaces:
@@ -19,14 +19,14 @@ spec:
     - name: init
       workspaces:
         - name: source
-          workspace: pipeline-workspace          
+          workspace: pipeline-workspace
       taskRef:
         name: cleanup
 
     - name: clone
       workspaces:
         - name: output
-          workspace: pipeline-workspace          
+          workspace: pipeline-workspace
       taskRef:
         name: git-clone
       params:
@@ -36,3 +36,40 @@ spec:
         value: $(params.branch)
       runAfter:
         - init
+
+    # --- LINT TASK using taskSpec ---
+    - name: lint
+      workspaces:
+        - name: source # Workspace holding the cloned code
+          workspace: pipeline-workspace
+      taskSpec:  # Define steps directly
+        workspaces:
+          - name: source # Task needs to declare the workspace it uses
+        steps:
+          - name: install-and-run-flake8 # Combine install and run
+            image: python:3.9-slim # Use the same Python image
+            workingDir: $(workspaces.source.path) # Run commands inside the workspace
+            script: |
+              echo "Installing flake8..."
+              pip install flake8
+              echo "Running flake8..."
+              # Run flake8 on the 'service' directory
+              flake8 service --count --max-complexity=10 --max-line-length=127 --statistics
+      runAfter:
+        - clone # Still run after clone
+    # --- END OF LINT TASK ---
+    # --- ADD THIS TESTS TASK ---
+    - name: tests
+      workspaces:
+        - name: source # Workspace with the code
+          workspace: pipeline-workspace
+      taskRef:
+        name: nose # Reference the custom nose task
+      params:
+      - name: database_uri # Pass the database URI to the task
+        value: "sqlite:///test.db" # Use SQLite for now
+      - name: args # Pass arguments to nosetests
+        value: "-v --with-spec --spec-color"
+      runAfter:
+        - clone # Run after cloning is done (in parallel with lint)
+    # --- END OF TESTS TASK ---
