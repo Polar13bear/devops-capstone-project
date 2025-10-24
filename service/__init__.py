@@ -41,3 +41,4 @@ except Exception as error:  # pylint: disable=broad-except
 app.logger.info("Service initialized!")
 
 # A single blank line MUST exist below this line
+
